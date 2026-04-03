@@ -9,7 +9,7 @@ description: >-
   reading/writing the clipboard, driving UI elements via System Events, and
   composing Mail messages. macOS only. Requires osascript (built-in) and Python 3.11+
   for date formatting.
-license: MIT
+license: Apache-2.0
 compatibility: macOS only. Requires osascript (built-in, no install). Python 3.11+ for date formatting.
 metadata:
   author: Christopher Quarcoo
