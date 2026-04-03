@@ -94,6 +94,13 @@ def format_applescript_date(iso_str: str) -> str:
 **Critical**: See [`references/date-formatting.md`](references/date-formatting.md)
 for why `%-d` and `%-I` are required.
 
+## Scripting Guide
+
+Before generating any AppleScript, read [`references/scripting-guide.md`](references/scripting-guide.md).
+It covers script structure, syntax rules, `whose` filtering, error handling,
+output formatting, text item delimiters, and common pitfalls. Following these
+patterns significantly increases the chance of first-run success.
+
 ## Agent Workflow
 
 When a user asks to automate a macOS app:
@@ -103,8 +110,8 @@ When a user asks to automate a macOS app:
    warn the user before running.
 3. **Check for a ready-made script** in `scripts/`. If one exists for the task,
    run it directly with the appropriate arguments — no need to generate AppleScript.
-4. **Otherwise, generate AppleScript** dynamically. Use `references/` as a
-   starting point, then adapt to the exact request.
+4. **Otherwise, generate AppleScript** dynamically. Read `references/scripting-guide.md`
+   for syntax and patterns, then consult the relevant app reference in `references/`.
 5. **Handle dates** — if the task involves dates or times, use `format_applescript_date()`
    to convert from ISO 8601.
 6. **Execute** via `run_applescript()` or `osascript` in Bash.
@@ -156,6 +163,7 @@ a script exists for the task.
 
 Vetted, copy-paste-ready AppleScript snippets are in `references/`, one file per app:
 
+- [`references/scripting-guide.md`](references/scripting-guide.md) — syntax, structure, error handling, and pitfalls (read first)
 - [`references/notification-center.md`](references/notification-center.md) — display notifications
 - [`references/reminders.md`](references/reminders.md) — create, list, complete reminders
 - [`references/calendar.md`](references/calendar.md) — create events, list calendars
