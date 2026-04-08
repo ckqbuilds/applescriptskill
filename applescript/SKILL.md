@@ -7,16 +7,15 @@ description: >-
   AppleScript tailored to each request — there is no fixed action library. Covers
   creating reminders and calendar events, managing notes, sending notifications,
   reading/writing the clipboard, driving UI elements via System Events, and
-  composing Mail messages. macOS only. Requires osascript (built-in) and Python 3.11+
-  for date formatting.
+  composing Mail messages. macOS only. Requires osascript (built-in).
 license: Apache-2.0
-compatibility: macOS only. Requires osascript (built-in, no install). Python 3.11+ for date formatting.
+compatibility: macOS only. Requires osascript (built-in, no install).
 metadata:
   author: Christopher Quarcoo
   version: "1.0"
 allowed-tools:
   - Bash(osascript:*)
-  - Bash(python3:*)
+  - Bash(sdef:*)
 ---
 
 # AppleScript Automation Skill
@@ -28,71 +27,37 @@ generates AppleScript at runtime based on the user's intent. Every macOS app tha
 supports the AppleScript dictionary can be automated — the reference patterns in
 `references/` are starting points, not limits.
 
-### Why AppleScript, Never JXA
+## Executing AppleScript
 
-JavaScript for Automation (JXA) was introduced in OS X Yosemite as an alternative
-to AppleScript. **Always prefer AppleScript over JXA** for these reasons:
-
-1. **Reliability** — JXA has known, unfixed bugs with `StandardAdditions`, date
-   handling, and `System Events` UI scripting that cause silent failures.
-2. **Documentation** — Nearly all Apple scripting documentation, Stack Overflow
-   answers, and app dictionaries target AppleScript. JXA examples are scarce.
-3. **App support** — Some apps expose AppleScript-only scripting suites. JXA
-   bridges can miss properties or fail on complex record types.
-4. **Stability** — Apple has not actively developed JXA since 2016. AppleScript
-   continues to receive maintenance and works reliably on every macOS release.
-
-## Shared Utility — `run_applescript()`
-
-Use this Python wrapper for all AppleScript execution. It handles error reporting
-and returns stdout cleanly.
-
-```python
-import subprocess, sys
-
-def run_applescript(script: str) -> str:
-    """Execute an AppleScript string via osascript and return stdout."""
-    result = subprocess.run(
-        ["osascript", "-e", script],
-        capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        print(f"AppleScript error: {result.stderr.strip()}", file=sys.stderr)
-        sys.exit(1)
-    return result.stdout.strip()
-```
-
-For multi-line scripts, pass each line as a separate `-e` argument or use a
-heredoc in Bash:
+Use `osascript` to run AppleScript. For multi-line scripts, **always use a
+heredoc** to avoid smart quote mangling (see `references/scripting-guide.md`):
 
 ```bash
 osascript <<'APPLESCRIPT'
 tell application "Reminders"
-    set newReminder to make new reminder in list "Reminders" with properties {name:"Buy milk"}
+    make new reminder in list "Reminders" with properties {name:"Buy milk"}
 end tell
 APPLESCRIPT
 ```
 
-## Date Formatting Helper
+To run a saved script file:
+
+```bash
+osascript scripts/mail/search-by-sender.applescript "sender@example.com"
+```
+
+## Date Formatting
 
 AppleScript parses date strings using the **system's locale format**. The safest
 portable format is: `"April 2, 2026 at 3:05:00 PM"`.
 
-```python
-from datetime import datetime
+**Critical rules:**
+- No zero-padding on day or hour: `2` not `02`, `3` not `03`
+- Full month name: `April` not `04`
+- 12-hour clock with `AM`/`PM`
 
-def format_applescript_date(iso_str: str) -> str:
-    """Convert ISO 8601 to AppleScript-safe date string.
-
-    Uses %-d and %-I to avoid zero-padding, which AppleScript
-    rejects on most locale configurations.
-    """
-    dt = datetime.fromisoformat(iso_str)
-    return dt.strftime("%B %-d, %Y at %-I:%M:%S %p")
-```
-
-**Critical**: See [`references/date-formatting.md`](references/date-formatting.md)
-for why `%-d` and `%-I` are required.
+See [`references/date-formatting.md`](references/date-formatting.md) for
+full details on why zero-padded values cause errors.
 
 ## Scripting Guide
 
@@ -112,9 +77,9 @@ When a user asks to automate a macOS app:
    run it directly with the appropriate arguments — no need to generate AppleScript.
 4. **Otherwise, generate AppleScript** dynamically. Read `references/scripting-guide.md`
    for syntax and patterns, then consult the relevant app reference in `references/`.
-5. **Handle dates** — if the task involves dates or times, use `format_applescript_date()`
-   to convert from ISO 8601.
-6. **Execute** via `run_applescript()` or `osascript` in Bash. **If the script
+5. **Handle dates** — if the task involves dates or times, format as
+   `"Month D, YYYY at H:MM:SS AM/PM"` with no zero-padding (see Date Formatting above).
+6. **Execute** via `osascript` using a heredoc. **If the script
    fails, do not stop.** Read stderr, diagnose using the dictionary lookup and
    error diagnosis sections in `references/scripting-guide.md`, fix the script,
    and retry (up to 3 attempts). Only ask the user for help after exhausting
@@ -161,8 +126,7 @@ osascript scripts/<app>/<script>.applescript [args...]
 ```
 
 Scripts that accept date arguments expect AppleScript date strings like
-`"April 5, 2026 at 9:00:00 AM"`. Use `format_applescript_date()` to convert
-from ISO 8601 before passing to these scripts.
+`"April 5, 2026 at 9:00:00 AM"`. See Date Formatting above for rules.
 
 The agent should prefer ready-made scripts over generating AppleScript when
 a script exists for the task.
@@ -187,3 +151,10 @@ Vetted, copy-paste-ready AppleScript snippets are in `references/`, one file per
 These patterns are starting points. The agent should adapt and compose them to
 match exactly what the user needs. Only load the reference files relevant to the
 current task.
+
+## Note: Always AppleScript, Never JXA
+
+Always use AppleScript, never JavaScript for Automation (JXA). JXA has unfixed
+bugs, scarce documentation, and incomplete app support. Apple hasn't actively
+developed it since 2016. AppleScript is more reliable, better documented, and
+works consistently across all macOS versions.

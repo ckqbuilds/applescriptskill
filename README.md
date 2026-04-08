@@ -12,14 +12,22 @@ Reminders, Calendar, Notes, Mail, Finder, Notification Center, System Events, Cl
 
 - macOS (AppleScript is not available on other platforms)
 - `osascript` (built-in on macOS)
-- Python 3.11+ (for date formatting helpers)
+- `sdef` (built-in on macOS, used for dictionary lookups)
 
 ## File Structure
 
 ```
 applescript/
 ├── SKILL.md                            # Main skill definition — the entry point agents read
+├── scripts/
+│   └── mail/
+│       ├── draft-new.applescript       # Draft a new email
+│       ├── draft-reply.applescript     # Draft a reply to an email
+│       ├── email-to-reminder.applescript   # Create a Reminder from an email
+│       └── email-to-calendar.applescript   # Create a Calendar event from an email
 └── references/
+    ├── scripting-guide.md              # Syntax, error handling, dictionary lookup, retry logic
+    ├── script-authoring.md             # How to create and verify new reusable scripts
     ├── notification-center.md          # Display notifications with sound
     ├── reminders.md                    # Create, list, complete reminders
     ├── calendar.md                     # Create events, list calendars, get today's events
@@ -36,11 +44,16 @@ applescript/
 
 The core skill file. Contains:
 
-- **Design philosophy** — why the agent generates scripts dynamically instead of using a fixed library
-- **`run_applescript()` utility** — a Python wrapper for executing AppleScript via `osascript`
-- **Date formatting helper** — converts ISO 8601 dates to AppleScript's required format
-- **Agent workflow** — step-by-step instructions for how the agent should handle automation requests
+- **Executing AppleScript** — how to run scripts via `osascript` with heredocs
+- **Date formatting** — rules for AppleScript's locale-sensitive date parsing
+- **Scripting guide** — pointer to syntax, error handling, and dictionary lookup reference
+- **Agent workflow** — step-by-step instructions including error diagnosis and retry
 - **macOS permissions table** — which apps require user approval and what to expect on first run
+- **Ready-made scripts** — pre-built `.applescript` files the agent can run directly
+
+### `applescript/scripts/`
+
+Pre-built `.applescript` files the agent can run directly via `osascript`. These save tokens by avoiding AppleScript generation for common tasks. Each script has a comment header with usage and arguments.
 
 ### `applescript/references/`
 
@@ -52,9 +65,9 @@ This skill follows the [agent skills progressive disclosure](https://agentskills
 
 1. **Discovery** — The agent sees only the skill's `name` and `description` from the SKILL.md frontmatter (~100 tokens). This is enough for the agent to decide whether the skill is relevant to the current task.
 
-2. **Activation** — When the agent determines the skill matches the user's request, it loads the full `SKILL.md` instructions (the design philosophy, utilities, workflow, and permissions table).
+2. **Activation** — When the agent determines the skill matches the user's request, it loads the full `SKILL.md` instructions (execution patterns, workflow, and permissions table).
 
-3. **Execution** — As the agent works through the task, it pulls in `references/patterns.md` only when it needs specific AppleScript snippets. This keeps the reference material out of context until it's actually needed.
+3. **Execution** — As the agent works through the task, it pulls in specific reference files and scripts only when needed. This keeps detailed material out of context until it's actually required.
 
 This means the skill costs almost nothing when it's not in use, and loads just what's needed when it is.
 
@@ -74,7 +87,7 @@ Or to install at the user level (available across all projects):
 
 ```bash
 # User-level location (varies by client)
-# Claude Code:
+# Claude Code / Claude Desktop:
 cp -r applescript/ ~/.claude/skills/applescript/
 ```
 
@@ -94,7 +107,7 @@ When the agent activates the skill, it should read `applescript/SKILL.md` and fo
 ```yaml
 allowed-tools:
   - Bash(osascript:*)
-  - Bash(python3:*)
+  - Bash(sdef:*)
 ```
 
 Ensure your agent has permission to run these tools via Bash.

@@ -25,9 +25,11 @@ Arguments arrive as a list of strings. Always coerce types explicitly:
 set maxResults to (item 2 of argv) as integer
 ```
 
-### Inline scripts (heredoc or `-e`)
+### Inline scripts (heredoc preferred)
 
-For one-off execution without a file:
+For one-off execution without a file, **always use a heredoc**. The Bash tool
+shell can mangle double quotes into smart quotes when using `osascript -e`,
+causing cryptic `-2741` errors.
 
 ```bash
 osascript <<'APPLESCRIPT'
@@ -37,11 +39,10 @@ end tell
 APPLESCRIPT
 ```
 
-Or single-line:
+The single quotes around `'APPLESCRIPT'` prevent interpolation and quote mangling.
 
-```bash
-osascript -e 'display notification "Done" with title "Build"'
-```
+Avoid `osascript -e` via the Bash tool. If you must use it (true single-line
+commands only), test carefully for quote corruption.
 
 ## Syntax Essentials
 
@@ -345,6 +346,28 @@ bugs in subsequent string operations.
 | Missing `with timeout` on large queries | Add `with timeout of N seconds` for bulk operations |
 | Passing unquoted args with spaces | Caller must quote: `osascript script.applescript "my arg"` |
 | Assuming `reply to` can be set on outgoing messages | It can't — this is a Mail.app limitation |
+| Smart quote mangling with `osascript -e` via Bash tool | The Bash tool shell can convert `"` to curly quotes `""`, causing error `-2741`. **Always use a heredoc** instead of `-e` (see below) |
+
+### Smart Quote Mangling (Bash Tool)
+
+When running `osascript -e '...'` through the Bash tool, double quotes can get
+silently converted to smart/curly quotes, causing:
+
+```
+syntax error: Expected """ but found unknown token. (-2741)
+```
+
+**Always use a heredoc** when executing AppleScript via the Bash tool:
+
+```bash
+osascript <<'APPLESCRIPT'
+display notification "Hello" with title "Test"
+APPLESCRIPT
+```
+
+The single quotes around `'APPLESCRIPT'` prevent any interpolation or character
+mangling. This issue only affects execution via the Bash tool shell —
+`subprocess.run` in Python does not have this problem.
 
 ## Error Diagnosis & Retry
 
@@ -390,6 +413,7 @@ These are exact strings you'll see in stderr. Match them to diagnose quickly:
 | `"not allowed assistive access"` | Accessibility permission missing for UI scripting | Tell user to enable in System Settings > Accessibility |
 | `"Connection is invalid"` | App not running or crashed | Try `activate` or `launch`, then retry |
 | `"AppleEvent timed out"` | Slow operation | Add `with timeout`, reduce scope |
+| `"Expected \"\"\""` or `-2741` with garbled quotes | Smart quote mangling from Bash tool shell | Switch from `osascript -e` to heredoc: `osascript <<'APPLESCRIPT'` |
 
 ### Retry example
 
