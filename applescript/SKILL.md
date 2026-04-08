@@ -114,7 +114,11 @@ When a user asks to automate a macOS app:
    for syntax and patterns, then consult the relevant app reference in `references/`.
 5. **Handle dates** — if the task involves dates or times, use `format_applescript_date()`
    to convert from ISO 8601.
-6. **Execute** via `run_applescript()` or `osascript` in Bash.
+6. **Execute** via `run_applescript()` or `osascript` in Bash. **If the script
+   fails, do not stop.** Read stderr, diagnose using the dictionary lookup and
+   error diagnosis sections in `references/scripting-guide.md`, fix the script,
+   and retry (up to 3 attempts). Only ask the user for help after exhausting
+   retries or hitting a permission error that requires user action.
 7. **Parse output** — `osascript` prints the result of the last expression to
    stdout. Parse it to confirm success or extract data.
 8. **Save reusable scripts** — If the generated AppleScript handles a discrete,

@@ -118,6 +118,87 @@ if count > 10 then ...
 if x ≥ 5 then ...    -- or: x >= 5
 ```
 
+## Dictionary Lookup (sdef)
+
+macOS ships with scripting dictionaries (`.sdef` files) for every scriptable app.
+These are the **authoritative source** for command names, parameter names, property
+names, and types. When in doubt about syntax, look it up.
+
+### How to query from AppleScript
+
+Use `do shell script` to run the `sdef` command through the existing tool:
+
+```applescript
+-- Get the full dictionary for an app
+do shell script "sdef /System/Applications/Mail.app"
+
+-- Search for a specific command
+do shell script "sdef /System/Applications/Mail.app | grep -A 15 'command name=\"reply\"'"
+
+-- Search for a class (object type)
+do shell script "sdef /System/Applications/Reminders.app | grep -A 20 'class name=\"reminder\"'"
+
+-- Search for a property
+do shell script "sdef /System/Applications/Calendar.app | grep 'property name='"
+```
+
+### App dictionary paths
+
+| App | sdef path |
+|-----|-----------|
+| Mail | `/System/Applications/Mail.app` |
+| Reminders | `/System/Applications/Reminders.app` |
+| Calendar | `/System/Applications/Calendar.app` |
+| Notes | `/System/Applications/Notes.app` |
+| Finder | `/System/Library/CoreServices/Finder.app` |
+| System Events | `/System/Library/CoreServices/System Events.app` |
+| StandardAdditions (notifications, dialogs, clipboard) | `/System/Library/ScriptingAdditions/StandardAdditions.osax` |
+
+### Reading sdef XML
+
+The output is XML. Key elements:
+
+| XML element | Meaning | AppleScript usage |
+|-------------|---------|-------------------|
+| `<command name="X">` | A command you can call | `X` |
+| `<direct-parameter>` | First unlabeled argument | Goes right after the command name |
+| `<parameter name="X">` | A named parameter | `X value` in AppleScript |
+| `<class name="X">` | An object type | Used in `tell`, `make new X`, etc. |
+| `<property name="X">` | A property of a class | `X of objectRef` |
+| `<element type="X">` | Child objects a class contains | `every X of parentRef` |
+| `optional="yes"` | Parameter is optional | Can be omitted |
+
+### Worked example: diagnosing a real error
+
+The agent generates:
+```applescript
+display notification with title "Workout" message "Do 10 pushups"
+```
+
+This fails with: `syntax error: A identifier can't go after this "". (-2740)`
+
+**Diagnosis**: Look up the command in StandardAdditions:
+```applescript
+do shell script "sdef /System/Library/ScriptingAdditions/StandardAdditions.osax | grep -A 10 'command name=\"display notification\"'"
+```
+
+The sdef shows:
+- `<direct-parameter type="text">` — body text goes first, unlabeled
+- `<parameter name="with title">` — not just `title`
+- `<parameter name="subtitle">` — not `message`
+- `<parameter name="sound name">` — optional
+
+**Fix**:
+```applescript
+display notification "Do 10 pushups" with title "Workout"
+```
+
+### When to look up sdef
+
+- **Before generating** AppleScript for a command you haven't used recently
+- **After any error** mentioning an unexpected identifier, wrong parameter, or unknown property
+- **When unsure** about parameter names, order, or types
+
 ## Filtering with `whose`
 
 The `whose` clause filters objects at the application level — far faster than
@@ -264,3 +345,60 @@ bugs in subsequent string operations.
 | Missing `with timeout` on large queries | Add `with timeout of N seconds` for bulk operations |
 | Passing unquoted args with spaces | Caller must quote: `osascript script.applescript "my arg"` |
 | Assuming `reply to` can be set on outgoing messages | It can't — this is a Mail.app limitation |
+
+## Error Diagnosis & Retry
+
+**Never report failure on the first error.** Read stderr, diagnose the problem,
+fix the script, and re-run. Retry up to 3 times before asking the user for help.
+Permission errors are the only exception — inform the user immediately.
+
+### Diagnosis workflow
+
+1. **Read the full stderr** output from osascript
+2. **Classify the error**:
+   - **Syntax error** (happens at compile time) → wrong parameter name, missing `end tell`, bad quoting
+   - **Runtime error** (happens during execution) → object not found, timeout, type mismatch
+   - **Permission error** → user must grant access in System Settings
+3. **For syntax errors**: look up the correct command/parameter names via sdef (see Dictionary Lookup section above), check block nesting, check string quoting
+4. **For runtime errors**: consult the error-to-fix table below, adjust the script
+5. **For permission errors**: tell the user what to enable — do not retry
+
+### Error-to-fix table
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `-2740` / "A identifier can't go after this" | Wrong parameter name or parameter order | Look up correct parameter names via `sdef`. Check that the direct parameter comes first (unlabeled), then named parameters. |
+| `-2741` / "Expected end of line but found identifier" | Missing `end tell`, wrong block nesting, or invalid keyword | Count your `tell`/`end tell` pairs. Check for typos in keywords. |
+| `-1728` / "Can't get" | `whose` matched nothing, or wrong property/container name | Broaden the filter. Check property and container names against sdef. Verify the target object exists. |
+| `-1712` / "Event timed out" | Operation took longer than 60s default | Add `with timeout of 120 seconds`. Limit results with `messages 1 thru N`. Narrow `whose` filter. |
+| `-10004` / "Not authorized to send Apple events" | Missing Automation or Accessibility permission | **Do not retry.** Tell user to enable in System Settings > Privacy & Security. |
+| `-1743` / "Can't make X into type Y" | Type coercion failure | Add explicit `as integer`, `as string`, or `as date`. Check that the value matches the expected type in sdef. |
+| `-600` / "Connection is invalid" | Target app is not running | The `tell application` block normally auto-launches the app. If still failing, add `activate` before the tell block or `launch` inside it. |
+| `-128` / "User canceled" | User clicked Cancel in a dialog | Not a real error — handle gracefully with `try`/`on error`. |
+
+### Common stderr patterns
+
+These are exact strings you'll see in stderr. Match them to diagnose quickly:
+
+| stderr contains | Diagnosis | Action |
+|-----------------|-----------|--------|
+| `"A identifier can't go after this \""` | Parameter name doesn't exist for this command | Run sdef lookup for the command, use correct parameter names |
+| `"Expected end of line but found"` | Block structure broken or unknown keyword | Check `tell`/`end tell` balance, look for typos |
+| `"Can't get"` followed by an object reference | Object doesn't exist or filter matched nothing | Verify object exists, broaden `whose`, check spelling |
+| `"Can't make"` ... `"into type"` | Wrong type passed to a parameter or coercion | Check sdef for expected type, add explicit coercion |
+| `"not allowed to send Apple events"` | Permission not granted | Tell user to enable in System Settings — stop retrying |
+| `"not allowed assistive access"` | Accessibility permission missing for UI scripting | Tell user to enable in System Settings > Accessibility |
+| `"Connection is invalid"` | App not running or crashed | Try `activate` or `launch`, then retry |
+| `"AppleEvent timed out"` | Slow operation | Add `with timeout`, reduce scope |
+
+### Retry example
+
+```
+Attempt 1: display notification with title "X" message "Y"
+  → stderr: "A identifier can't go after this" (-2740)
+  → Diagnosis: "message" is not a valid parameter
+  → Action: sdef lookup → correct params are direct-parameter, "with title", "subtitle"
+
+Attempt 2: display notification "Y" with title "X"
+  → Success
+```
