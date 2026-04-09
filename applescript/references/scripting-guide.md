@@ -375,6 +375,22 @@ mangling. This issue only affects execution via the Bash tool shell —
 fix the script, and re-run. Retry up to 3 times before asking the user for help.
 Permission errors are the only exception — inform the user immediately.
 
+### Local error code lookup (MacErrors.h)
+
+macOS ships with `MacErrors.h` — the authoritative source for all Apple Event
+and OSA error codes. To look up any error code:
+
+```bash
+# Find the file (path varies by SDK version)
+find /Library/Developer/CommandLineTools/SDKs -name "MacErrors.h"
+
+# Look up a specific error code
+grep -- "-2741" /Library/Developer/CommandLineTools/SDKs/MacOSX*.sdk/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/CarbonCore.framework/Versions/A/Headers/MacErrors.h
+```
+
+Use this when you encounter an error code not in the table below, or when you
+need the official description of a known code.
+
 ### Diagnosis workflow
 
 1. **Read the full stderr** output from osascript
