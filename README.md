@@ -71,29 +71,56 @@ This skill follows the [agent skills progressive disclosure](https://agentskills
 
 This means the skill costs almost nothing when it's not in use, and loads just what's needed when it is.
 
-## Installation
+## Quick Install
+
+The fastest way to install this skill is the one-liner `npx skills` command. It works across Claude Code, Cursor, Codex, Copilot, and 40+ other agent products — no manual copying, no path juggling. The CLI detects your environment and drops the skill in the right place.
+
+CLI source: [github.com/vercel-labs/skills](https://github.com/vercel-labs/skills)
+
+```bash
+# Global install — available across every project on your machine
+npx skills add applescript --global
+```
+
+```bash
+# Project-level install — scoped to the current repository
+npx skills add applescript
+```
+
+```bash
+# Agent-specific install — target a particular agent (e.g. claude-code, cursor, codex, copilot)
+npx skills add applescript --agent claude-code
+```
+
+After the command finishes, skip to **Step 3: Verify it's working** below to confirm the install.
+
+## Manual Installation
+
+**Note:** The repository is named `applescriptskill`, but the installable skill is the `applescript/` subdirectory inside it. Copy that directory — not the repository root.
 
 ### Step 1: Add the skill to your project
 
-Copy the `applescript/` directory into the [cross-client skills directory](https://agentskills.io/client-implementation/adding-skills-support) at the root of your project:
+Use **user-level** if you want the skill available across all your projects. Use **project-level** if you want it scoped to a single repo. When in doubt, start with user-level.
+
+No dependencies to install. `osascript` and `sdef` are built into macOS.
 
 ```bash
-# Cross-client location (works with Claude Code, Copilot, Cursor, Gemini CLI, etc.)
-mkdir -p .agents/skills
-cp -r applescript/ .agents/skills/applescript/
-```
-
-Or to install at the user level (available across all projects):
-
-```bash
-# User-level location (varies by client)
+# User-level (available in every project)
 # Claude Code / Claude Desktop:
 cp -r applescript/ ~/.claude/skills/applescript/
 ```
 
+```bash
+# Project-level (works with Claude Code, Copilot, Cursor, Gemini CLI, etc.)
+mkdir -p .agents/skills
+cp -r applescript/ .agents/skills/applescript/
+```
+
 ### Step 2: Reference in your system prompt (if needed)
 
-Most skill-aware agents will auto-discover skills in `.agents/skills/`. If your agent requires manual registration, add the skill's name and description to your system prompt or tool catalog so the agent knows it's available:
+**Claude Code and Claude Desktop users can skip this step** — they auto-discover skills and do not require manual registration.
+
+This step is only relevant for agents that don't support auto-discovery. Add the skill's name and description to your system prompt or tool catalog so the agent knows it's available:
 
 ```
 Available skills:
@@ -111,6 +138,10 @@ allowed-tools:
 ```
 
 Ensure your agent has permission to run these tools via Bash.
+
+### Step 3: Verify it's working
+
+Ask your agent: **"Remind me to test this in 5 minutes"**. If a reminder appears in the macOS Reminders app, the skill is installed and working correctly.
 
 ## Usage
 
