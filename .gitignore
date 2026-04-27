@@ -7,3 +7,28 @@ SESSION.md
 
 # Tethr local store
 .tethr/
+
+# Brainstorm preview state and content
+.superpowers/
+
+# Carousel export output (regenerate via applescript/scripts/carousel/export-carousel.mjs)
+carousel-export/
+
+# Scratch PNGs at project root (kept tracked: applescript/assets/, carousel-export when needed)
+/*.png
+
+# Node modules from carousel export script
+applescript/scripts/carousel/node_modules/
+applescript/scripts/carousel/package-lock.json
+
+# Compiled Swift binaries (regenerate via swiftc — see comment header in each .swift file)
+applescript/scripts/calendar/calendar-read
+applescript/scripts/reminders/reminders-read
+applescript/scripts/system/html2pdf
+
+# Playwright-MCP runtime logs and page snapshots
+.playwright-mcp/
+
+# macOS Finder metadata
+.DS_Store
+**/.DS_Store

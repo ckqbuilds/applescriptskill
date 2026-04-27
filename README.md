@@ -8,11 +8,20 @@ Supported by 30+ agent products including Claude Code, VS Code/Copilot, Cursor, 
 
 Reminders, Calendar, Notes, Mail, Finder, Notification Center, System Events, Clipboard, and any other scriptable Mac app.
 
+The skill goes beyond plain AppleScript with a few additional capabilities:
+
+- **HTML → PDF rendering** via Swift + WebKit. The agent generates HTML/CSS, and a compiled converter turns it into a multi-page PDF. See [pdf-generation.md](applescript/references/pdf-generation.md).
+- **HTML → Mail draft** via the `«class HTML»` clipboard type. The agent generates HTML, AppleScript loads it onto the clipboard as rich HTML, and a Mail compose window receives it as styled rich text. See [html-email.md](applescript/references/html-email.md).
+- **Fast Calendar / Reminders reads** via Swift + EventKit. AppleScript reads of these apps are slow; the Swift readers return results roughly 100x faster. See [scripts/calendar/](applescript/scripts/calendar/) and [scripts/reminders/](applescript/scripts/reminders/).
+
+PDF generation and HTML email drafts are **distinct outputs** of the same HTML-authoring capability — pick the one that matches the user's goal (a document to share vs. a styled message to send).
+
 ## Requirements
 
 - macOS (AppleScript is not available on other platforms)
 - `osascript` (built-in on macOS)
 - `sdef` (built-in on macOS, used for dictionary lookups)
+- `swiftc` and `swift` (built-in via Command Line Tools, needed for PDF rendering and the Calendar/Reminders readers)
 
 ## Quick Install
 
@@ -45,7 +54,7 @@ After the command finishes, skip to **Step 3: Verify it's working** below to con
 
 Use **user-level** if you want the skill available across all your projects. Use **project-level** if you want it scoped to a single repo. When in doubt, start with user-level.
 
-No dependencies to install. `osascript` and `sdef` are built into macOS.
+No dependencies to install. `osascript`, `sdef`, `swiftc`, and `swift` all ship with macOS / Command Line Tools.
 
 ```bash
 # User-level (available in every project)
@@ -69,7 +78,9 @@ This step is only relevant for agents that don't support auto-discovery. Add the
 Available skills:
 - applescript: Automate native macOS applications using AppleScript via osascript.
   Use when users ask to interact with Reminders, Calendar, Notes, Mail, Finder,
-  Notification Center, System Events, or any scriptable Mac app.
+  Notification Center, System Events, or any scriptable Mac app. Also handles
+  HTML→PDF rendering (Swift + WebKit), HTML-bodied email drafts (clipboard paste
+  into Mail), and fast Calendar/Reminders reads (Swift + EventKit).
 ```
 
 When the agent activates the skill, it should read `applescript/SKILL.md` and follow the instructions there. The `allowed-tools` frontmatter declares the required tool permissions:
@@ -78,9 +89,11 @@ When the agent activates the skill, it should read `applescript/SKILL.md` and fo
 allowed-tools:
   - Bash(osascript:*)
   - Bash(sdef:*)
+  - Bash(swiftc:*)
+  - Bash(swift:*)
 ```
 
-Ensure your agent has permission to run these tools via Bash.
+Ensure your agent has permission to run these tools via Bash. `swiftc` and `swift` are required for the PDF renderer and the Swift Calendar/Reminders readers — if you don't plan to use those, you can omit them.
 
 ### Step 3: Verify it's working
 
@@ -95,8 +108,10 @@ Once installed, ask your agent to do things like:
 - "Show me my incomplete reminders"
 - "Send a notification that the build finished"
 - "Draft an email to team@example.com with this week's update"
+- "Draft an **HTML** email to investors@example.com with our Q1 numbers in a styled table"
+- "Generate a branded PDF report from this data and save it to ~/Desktop"
 
-The agent reads the skill definition, generates the appropriate AppleScript, and executes it on your Mac.
+The agent reads the skill definition, generates the appropriate AppleScript (or HTML, for the rendering paths), and executes it on your Mac.
 
 ## File Structure
 
@@ -104,11 +119,18 @@ The agent reads the skill definition, generates the appropriate AppleScript, and
 applescript/
 ├── SKILL.md                            # Main skill definition — the entry point agents read
 ├── scripts/
-│   └── mail/
-│       ├── draft-new.applescript       # Draft a new email
-│       ├── draft-reply.applescript     # Draft a reply to an email
-│       ├── email-to-reminder.applescript   # Create a Reminder from an email
-│       └── email-to-calendar.applescript   # Create a Calendar event from an email
+│   ├── mail/
+│   │   ├── draft-new.applescript           # Draft a new plain-text email
+│   │   ├── draft-html.applescript          # Draft an email with an HTML body (clipboard paste)
+│   │   ├── draft-reply.applescript         # Draft a reply to an email
+│   │   ├── email-to-reminder.applescript   # Create a Reminder from an email
+│   │   └── email-to-calendar.applescript   # Create a Calendar event from an email
+│   ├── calendar/
+│   │   └── calendar-read.swift         # Fast event reads via EventKit (compile with swiftc)
+│   ├── reminders/
+│   │   └── reminders-read.swift        # Fast reminder reads via EventKit (compile with swiftc)
+│   └── system/
+│       └── html2pdf.swift              # HTML→PDF renderer via WebKit (compile with swiftc)
 └── references/
     ├── scripting-guide.md              # Syntax, error handling, dictionary lookup, retry logic
     ├── script-authoring.md             # How to create and verify new reusable scripts
@@ -120,7 +142,9 @@ applescript/
     ├── dialogs.md                      # Dialogs, alerts, choose from list
     ├── system-events.md                # UI scripting, keystrokes, menu clicks
     ├── finder.md                       # File and folder operations
-    ├── mail.md                         # Compose, send, search email
+    ├── mail.md                         # Compose, send, search email (plain text)
+    ├── html-email.md                   # HTML-bodied email drafts via clipboard paste
+    ├── pdf-generation.md               # HTML→PDF pipeline, page layout, branded templates
     └── date-formatting.md              # Date parsing gotchas and helpers
 ```
 
@@ -133,11 +157,11 @@ The core skill file. Contains:
 - **Scripting guide** — pointer to syntax, error handling, and dictionary lookup reference
 - **Agent workflow** — step-by-step instructions including error diagnosis and retry
 - **macOS permissions table** — which apps require user approval and what to expect on first run
-- **Ready-made scripts** — pre-built `.applescript` files the agent can run directly
+- **Ready-made scripts** — pre-built `.applescript` and `.swift` files the agent can run directly
 
 ### `applescript/scripts/`
 
-Pre-built `.applescript` files the agent can run directly via `osascript`. These save tokens by avoiding AppleScript generation for common tasks. Each script has a comment header with usage and arguments.
+Pre-built scripts the agent can run directly. AppleScript files (`.applescript`) run via `osascript`; Swift files (`.swift`) compile once with `swiftc` and run as native binaries. Both save tokens by avoiding generation for common tasks. Each script has a comment header with usage, arguments, and (for Swift) the compile command.
 
 ### `applescript/references/`
 

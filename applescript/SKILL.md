@@ -7,7 +7,12 @@ description: >-
   AppleScript tailored to each request — there is no fixed action library. Covers
   creating reminders and calendar events, managing notes, sending notifications,
   reading/writing the clipboard, driving UI elements via System Events, and
-  composing Mail messages. macOS only. Requires osascript (built-in).
+  composing Mail messages. Also use when the user wants to generate styled HTML
+  output: HTML-bodied email drafts in Mail (via clipboard paste), HTML-to-PDF
+  rendering with branded templates (via Swift + WebKit), or any task that
+  involves authoring HTML/CSS for delivery on macOS. Includes fast Swift readers
+  for Calendar and Reminders (~100x faster than AppleScript reads). macOS only.
+  Requires osascript (built-in); swiftc/swift needed for PDF and Swift readers.
 license: Apache-2.0
 compatibility: macOS only. Requires osascript (built-in, no install).
 metadata:
@@ -73,6 +78,9 @@ patterns significantly increases the chance of first-run success.
 When a user asks to automate a macOS app:
 
 1. **Identify the target app** and the operation (create, read, update, delete).
+   For requests involving styled output ("a report," "a styled email," "a PDF,"
+   "an HTML newsletter"), see **Rendering HTML** below to pick between the
+   PDF and Mail-draft paths before doing anything else.
 2. **Check permissions** — see the table below. If the app requires approval,
    warn the user before running.
 3. **Check for a ready-made script** in `scripts/`. If one exists for the task,
@@ -103,33 +111,74 @@ When a user asks to automate a macOS app:
 | Notes                | Automation permission for Notes.app        | macOS prompts; user must click Allow        |
 | Notification Center  | None (display notification is unprompted)   | Works immediately                           |
 | System Events / UI   | Accessibility (System Settings > Privacy)  | Must be enabled manually before scripting   |
+| Mail (HTML drafts)   | Accessibility (for the ⌘V paste step)     | Same as System Events — enable Accessibility for the calling app |
 
 **Accessibility note**: UI scripting via `System Events` requires the calling app
 (e.g., Terminal, iTerm, VS Code) to have Accessibility access. If the script
 fails with "not allowed assistive access," instruct the user to enable it in
 **System Settings > Privacy & Security > Accessibility**.
 
+## Rendering HTML: Two Output Targets
+
+The agent can generate HTML and render it in two different ways. These are
+**distinct capabilities** — pick the one that matches what the user wants.
+
+| User wants…                                  | Output    | How                                                                                  |
+|----------------------------------------------|-----------|--------------------------------------------------------------------------------------|
+| A document to save, share, or print          | **PDF**   | Compile `scripts/system/html2pdf.swift` once, then render via Swift + WebKit         |
+| A styled email they can review and send      | **Mail draft** | Run `scripts/mail/draft-html.applescript` — sets the `html content` property on a new outgoing message |
+
+Both paths start with the agent writing HTML. Authoring patterns (typography,
+brand colors, callout boxes, tables) are in
+[`references/pdf-generation.md`](references/pdf-generation.md). For email, drop
+the `.page` wrapper and fixed page dimensions — see
+[`references/html-email.md`](references/html-email.md) for the differences and
+for email-client rendering caveats (e.g. Mail's compose view strips `<body>`
+backgrounds; bgcolor must go on every section-wrapper `<td>`).
+
+**Note on Mail's dictionary:** `sdef /System/Applications/Mail.app` marks the
+`html content` property as deprecated and "does nothing." This is wrong on
+modern macOS — verified live, the property does render HTML. Trust the live
+behavior for this property; the dictionary description is stale.
+
 ## Ready-Made Scripts
 
-Pre-built `.applescript` files the agent can run directly via `osascript`. These
-save tokens by avoiding AppleScript generation for common tasks.
+Pre-built scripts the agent can run directly. These save tokens by avoiding
+AppleScript generation for common tasks.
 
 Scripts are organized by application under `scripts/`:
 
 | Application | Directory | Description |
 |-------------|-----------|-------------|
-| Mail | `scripts/mail/` | Search, read, draft, reply, and cross-app actions (email &#8594; reminder/calendar) |
-| System | `scripts/system/` | PDF generation (html2pdf.swift &#8212; compile once with `swiftc`) |
+| Mail | `scripts/mail/` | Draft (plain text), draft (HTML body), reply, and cross-app actions (email &#8594; reminder/calendar) |
+| Calendar | `scripts/calendar/` | Fast event reads via Swift + EventKit (`calendar-read.swift` &#8212; compile once with `swiftc`) |
+| Reminders | `scripts/reminders/` | Fast reminder reads via Swift + EventKit (`reminders-read.swift` &#8212; compile once with `swiftc`) |
+| System | `scripts/system/` | PDF generation (`html2pdf.swift` &#8212; compile once with `swiftc`) |
 
-To use a script, browse the relevant directory, read the comment header at the top
-of the file for usage and arguments, then run with:
+**Why some scripts are Swift, not AppleScript:** AppleScript reads from
+Calendar/Reminders are slow (per-property IPC round-trips). Swift via EventKit
+is roughly two orders of magnitude faster. AppleScript is still preferred for
+writes (creating events, drafting mail) because writes are single-shot.
+
+To use a script, browse the relevant directory and read the comment header at
+the top of the file for usage and arguments. AppleScript files run via:
 
 ```bash
 osascript scripts/<app>/<script>.applescript [args...]
 ```
 
-Scripts that accept date arguments expect AppleScript date strings like
-`"April 5, 2026 at 9:00:00 AM"`. See Date Formatting above for rules.
+Swift files (the readers and the PDF renderer) are compiled once with `swiftc`
+— see the comment header in each `.swift` file for the exact command — and then
+run as native binaries:
+
+```bash
+scripts/calendar/calendar-read --from 2026-04-21 --to 2026-04-25
+scripts/system/html2pdf input.html output.pdf
+```
+
+Scripts that accept AppleScript date arguments expect strings like
+`"April 5, 2026 at 9:00:00 AM"` (see Date Formatting above). Swift readers use
+ISO format (`YYYY-MM-DD` or `YYYY-MM-DDTHH:mm`).
 
 The agent should prefer ready-made scripts over generating AppleScript when
 a script exists for the task.
@@ -148,7 +197,8 @@ Vetted, copy-paste-ready AppleScript snippets are in `references/`, one file per
 - [`references/dialogs.md`](references/dialogs.md) — dialogs, alerts, choose from list
 - [`references/system-events.md`](references/system-events.md) — UI scripting, keystrokes, menu clicks
 - [`references/finder.md`](references/finder.md) — file/folder operations
-- [`references/mail.md`](references/mail.md) — compose, send, search email
+- [`references/mail.md`](references/mail.md) — compose, send, search email (plain text)
+- [`references/html-email.md`](references/html-email.md) — HTML-bodied email drafts via clipboard paste
 - [`references/date-formatting.md`](references/date-formatting.md) — date parsing gotchas and helpers
 - [`references/pdf-generation.md`](references/pdf-generation.md) — HTML-to-PDF pipeline, page layout, templates
 
